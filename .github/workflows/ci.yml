@@ -2,7 +2,15 @@ name: ci
 
 on:
   push:
+    branches:
+      - main
+    tags:
+      - "v*"
   pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -97,4 +105,3 @@ jobs:
           ROCHEDB_CORE_DIR: ${{ github.workspace }}/rochedb-core
           LD_LIBRARY_PATH: ${{ github.workspace }}/rochedb-core/lib
           DYLD_LIBRARY_PATH: ${{ github.workspace }}/rochedb-core/lib
-
