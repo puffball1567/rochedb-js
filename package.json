@@ -1,0 +1,55 @@
+{
+  "name": "rochedb",
+  "version": "0.1.0",
+  "description": "JavaScript / TypeScript driver for RocheDB",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/puffball1567/rochedb",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/puffball1567/rochedb-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/puffball1567/rochedb-js/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "native",
+    "binding.gyp",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build:native": "node-gyp rebuild",
+    "build:ts": "tsc -p tsconfig.json",
+    "build": "npm run build:native && npm run build:ts",
+    "test": "npm run test:node",
+    "test:node": "node --test test/*.node.test.mjs",
+    "test:bun": "bun test test/*.bun.test.mjs",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "database",
+    "nosql",
+    "vector",
+    "rag",
+    "rochedb",
+    "typescript"
+  ],
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "node-gyp": "^11.0.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
