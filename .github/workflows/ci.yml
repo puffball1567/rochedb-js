@@ -1,0 +1,100 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            roche_lib: librochedb.so
+          - os: macos-latest
+            roche_lib: librochedb.dylib
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout JavaScript driver
+        uses: actions/checkout@v4
+
+      - name: Checkout RocheDB core
+        uses: actions/checkout@v4
+        with:
+          repository: puffball1567/rochedb
+          path: rochedb-core
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install Bun on Linux
+        if: runner.os == 'Linux'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.4"
+
+      - name: Install Nim on Linux
+        if: runner.os == 'Linux'
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: "2.2.10"
+
+      - name: Install Nim on macOS
+        if: runner.os == 'macOS'
+        run: brew install nim
+
+      - name: Install libsodium on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libsodium-dev
+
+      - name: Install libsodium on macOS
+        if: runner.os == 'macOS'
+        run: brew install libsodium
+
+      - name: Configure macOS libsodium paths
+        if: runner.os == 'macOS'
+        run: |
+          prefix="$(brew --prefix libsodium)"
+          echo "LIBRARY_PATH=$prefix/lib:$LIBRARY_PATH" >> "$GITHUB_ENV"
+          echo "CPATH=$prefix/include:$CPATH" >> "$GITHUB_ENV"
+          echo "DYLD_LIBRARY_PATH=$prefix/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
+
+      - name: Build RocheDB C ABI
+        run: |
+          cd rochedb-core
+          nimble install -y
+          nim c --app:lib -d:release --nimcache:/tmp/nimcache_roche_capi -o:lib/${{ matrix.roche_lib }} src/rochedb_capi.nim
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          ROCHEDB_CORE_DIR: ${{ github.workspace }}/rochedb-core
+
+      - name: Build TypeScript
+        run: npm run build:ts
+
+      - name: Test Node.js driver
+        run: npm run test:node
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/rochedb-core/lib
+          DYLD_LIBRARY_PATH: ${{ github.workspace }}/rochedb-core/lib
+
+      - name: Test Bun compatibility
+        if: runner.os == 'Linux'
+        run: npm run test:bun
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/rochedb-core/lib
+
+      - name: Check package contents
+        run: npm pack --dry-run
+        env:
+          ROCHEDB_CORE_DIR: ${{ github.workspace }}/rochedb-core
+          LD_LIBRARY_PATH: ${{ github.workspace }}/rochedb-core/lib
+          DYLD_LIBRARY_PATH: ${{ github.workspace }}/rochedb-core/lib
+

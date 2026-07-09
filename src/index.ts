@@ -9,6 +9,59 @@ export interface RocheId {
   tWrite: number;
 }
 
+export type RocheDbErrorKind =
+  | "abi"
+  | "abi_version_mismatch"
+  | "closed"
+  | "invalid_id"
+  | "not_found"
+  | "nul_byte"
+  | "utf8"
+  | "type"
+  | "unknown";
+
+export class RocheDbError extends Error {
+  readonly kind: RocheDbErrorKind;
+  readonly cause?: unknown;
+
+  constructor(kind: RocheDbErrorKind, message: string, cause?: unknown) {
+    super(message);
+    this.name = "RocheDbError";
+    this.kind = kind;
+    this.cause = cause;
+  }
+}
+
+export function isRocheDbError(value: unknown): value is RocheDbError {
+  return value instanceof RocheDbError;
+}
+
+export function formatRocheId(id: RocheId): string {
+  return `${id.parent}:${id.epoch}:${id.seq}:${id.tWrite}`;
+}
+
+export function parseRocheId(value: string): RocheId {
+  const parts = value.split(":");
+  if (parts.length !== 4) {
+    throw new RocheDbError(
+      "invalid_id",
+      `invalid RocheDB id '${value}': expected parent:epoch:seq:tWrite`,
+    );
+  }
+
+  try {
+    return {
+      parent: BigInt(parts[0]),
+      epoch: parseUint32Part(parts[1], "epoch"),
+      seq: parseUint32Part(parts[2], "seq"),
+      tWrite: parseNumberPart(parts[3], "tWrite"),
+    };
+  } catch (error) {
+    if (error instanceof RocheDbError) throw error;
+    throw new RocheDbError("invalid_id", `invalid RocheDB id '${value}'`, error);
+  }
+}
+
 export interface ConnectOptions {
   username?: string;
   password?: string;
@@ -94,6 +147,48 @@ function loadNative(): NativeBinding {
 
 const native = loadNative();
 
+function parseUint32Part(value: string, name: string): number {
+  if (!/^\d+$/.test(value)) {
+    throw new RocheDbError("invalid_id", `invalid RocheDB id field '${name}': ${value}`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 0xffffffff) {
+    throw new RocheDbError("invalid_id", `invalid RocheDB id field '${name}' is out of range`);
+  }
+  return parsed;
+}
+
+function parseNumberPart(value: string, name: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new RocheDbError("invalid_id", `invalid RocheDB id field '${name}': ${value}`);
+  }
+  return parsed;
+}
+
+function classifyNativeError(error: unknown): RocheDbErrorKind {
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  if (lower.includes("abi version")) return "abi_version_mismatch";
+  if (lower.includes("closed")) return "closed";
+  if (lower.includes("not found")) return "not_found";
+  if (lower.includes("nul") || lower.includes("null byte")) return "nul_byte";
+  if (lower.includes("utf")) return "utf8";
+  if (lower.includes("must be") || lower.includes("requires")) return "type";
+  if (lower.includes("abi")) return "abi";
+  return "unknown";
+}
+
+function wrapNative<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (error) {
+    if (error instanceof RocheDbError) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new RocheDbError(classifyNativeError(error), message, error);
+  }
+}
+
 function bytes(data: string | Uint8Array): string | Uint8Array {
   return typeof data === "string" ? Buffer.from(data) : data;
 }
@@ -111,11 +206,11 @@ export class RocheDb {
   }
 
   static open(nodes = 8): RocheDb {
-    return new RocheDb(native.open(nodes));
+    return wrapNative(() => new RocheDb(native.open(nodes)));
   }
 
   static openDir(nodes: number, dir: string): RocheDb {
-    return new RocheDb(native.openDir(nodes, dir));
+    return wrapNative(() => new RocheDb(native.openDir(nodes, dir)));
   }
 
   static connect(peers: string, options: ConnectOptions = {}): RocheDb {
@@ -126,29 +221,29 @@ export class RocheDb {
       options.secretKey !== undefined ||
       options.galaxy !== undefined;
     if (!hasAuth) {
-      return new RocheDb(native.connect(peers));
+      return wrapNative(() => new RocheDb(native.connect(peers)));
     }
-    return new RocheDb(
-      native.connectAuth(
+    return wrapNative(
+      () => new RocheDb(native.connectAuth(
         peers,
         options.username ?? "",
         options.password ?? "",
         options.authToken ?? "",
         options.secretKey ?? "",
         options.galaxy ?? "",
-      ),
+      )),
     );
   }
 
   close(): void {
     if (!this.#closed) {
-      native.close(this.#handle);
+      wrapNative(() => native.close(this.#handle));
       this.#closed = true;
     }
   }
 
   put(ring: string, data: string | Uint8Array): RocheId {
-    return native.put(this.#handle, ring, bytes(data));
+    return wrapNative(() => native.put(this.#handle, ring, bytes(data)));
   }
 
   putJson(ring: string, value: unknown): RocheId {
@@ -156,11 +251,11 @@ export class RocheDb {
   }
 
   putVec(ring: string, data: string | Uint8Array, vec: number[] | Float32Array): RocheId {
-    return native.put(this.#handle, ring, bytes(data), vector(vec));
+    return wrapNative(() => native.put(this.#handle, ring, bytes(data), vector(vec)));
   }
 
   get(id: RocheId): Uint8Array | null {
-    return native.get(this.#handle, id);
+    return wrapNative(() => native.get(this.#handle, id));
   }
 
   getString(id: RocheId): string | null {
@@ -169,7 +264,7 @@ export class RocheDb {
   }
 
   batchGet(ids: RocheId[]): Array<Uint8Array | null> {
-    return native.batchGet(this.#handle, ids);
+    return wrapNative(() => native.batchGet(this.#handle, ids));
   }
 
   batchGetStrings(ids: RocheId[]): Array<string | null> {
@@ -178,7 +273,7 @@ export class RocheDb {
   }
 
   query(id: RocheId, selection: string): Uint8Array {
-    return native.query(this.#handle, id, selection);
+    return wrapNative(() => native.query(this.#handle, id, selection));
   }
 
   queryString(id: RocheId, selection: string): string {
@@ -186,54 +281,58 @@ export class RocheDb {
   }
 
   retrieve(vec: number[] | Float32Array, options: RetrieveOptions = {}): RetrieveResult {
-    return native.retrieve(
+    return wrapNative(() => native.retrieve(
       this.#handle,
       vector(vec),
       options.ring ?? "",
       options.budget ?? 8,
       options.topRings ?? 0,
       options.focus ?? 0,
-    );
+    ));
   }
 
   atlas(vec?: number[] | Float32Array, maxCentroidDims = 8): unknown {
-    const raw = native.atlas(
+    const raw = wrapNative(() => native.atlas(
       this.#handle,
       vec === undefined ? undefined : vector(vec),
       maxCentroidDims,
-    );
-    return JSON.parse(raw);
+    ));
+    try {
+      return JSON.parse(raw);
+    } catch (error) {
+      throw new RocheDbError("utf8", "RocheDB atlas returned invalid JSON", error);
+    }
   }
 
   locate(id: RocheId, at = -1): number {
-    return native.locate(this.#handle, id, at);
+    return wrapNative(() => native.locate(this.#handle, id, at));
   }
 
   now(): number {
-    return native.now(this.#handle);
+    return wrapNative(() => native.now(this.#handle));
   }
 
   advance(dt: number): void {
-    native.advance(this.#handle, dt);
+    wrapNative(() => native.advance(this.#handle, dt));
   }
 
   nextVisit(id: RocheId, node: number): number {
-    return native.nextVisit(this.#handle, id, node);
+    return wrapNative(() => native.nextVisit(this.#handle, id, node));
   }
 
   nextJoin(a: RocheId, b: RocheId): number {
-    return native.nextJoin(this.#handle, a, b);
+    return wrapNative(() => native.nextJoin(this.#handle, a, b));
   }
 
   configureRing(ring: string, period: number): void {
-    native.configureRing(this.#handle, ring, period);
+    wrapNative(() => native.configureRing(this.#handle, ring, period));
   }
 
   setGalaxyDescription(description: string): void {
-    native.setGalaxyDescription(this.#handle, description);
+    wrapNative(() => native.setGalaxyDescription(this.#handle, description));
   }
 
   setRingDescription(ring: string, description: string): void {
-    native.setRingDescription(this.#handle, ring, description);
+    wrapNative(() => native.setRingDescription(this.#handle, ring, description));
   }
 }

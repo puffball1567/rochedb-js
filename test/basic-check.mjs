@@ -1,4 +1,9 @@
-import { RocheDb } from "../dist/index.js";
+import {
+  formatRocheId,
+  isRocheDbError,
+  parseRocheId,
+  RocheDb,
+} from "../dist/index.js";
 
 export function runEmbeddedCheck(assert) {
   const db = RocheDb.open(4);
@@ -16,6 +21,7 @@ export function runEmbeddedCheck(assert) {
     const docB = db.putVec("docs/js", "javascript driver", [0, 1, 0]);
 
     assert.equal(db.getString(profileId), '{"name":"Ada","role":"admin"}');
+    assert.deepEqual(parseRocheId(formatRocheId(profileId)), profileId);
     assert.deepEqual(db.batchGetStrings([profileId, docA]), [
       '{"name":"Ada","role":"admin"}',
       "nim database",
@@ -47,3 +53,26 @@ export function runEmbeddedCheck(assert) {
   }
 }
 
+export function runApiCheck(assert) {
+  const id = parseRocheId("1:2:3:4.5");
+  assert.deepEqual(id, {
+    parent: 1n,
+    epoch: 2,
+    seq: 3,
+    tWrite: 4.5,
+  });
+  assert.equal(formatRocheId(id), "1:2:3:4.5");
+
+  assert.throws(
+    () => parseRocheId("1:2:3"),
+    (error) => isRocheDbError(error) && error.kind === "invalid_id",
+  );
+
+  const db = RocheDb.open(2);
+  db.close();
+
+  assert.throws(
+    () => db.put("closed/test", "payload"),
+    (error) => isRocheDbError(error) && error.kind === "closed",
+  );
+}
