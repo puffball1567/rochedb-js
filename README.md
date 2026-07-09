@@ -15,13 +15,73 @@ This package currently targets Node.js through Node-API. Bun can load the same N
 
 ## Install
 
-After the package is published:
+This driver is a Node-API addon over the RocheDB C ABI. Install the JavaScript
+package and make the RocheDB shared library available before running your app.
+
+Prerequisites:
+
+- Node.js 20+
+- Nim 2.2.x to build RocheDB core. Install Nim: <https://nim-lang.org/install.html>. Nimble is included with the standard Nim installation.
+- `libsodium` development headers, required by RocheDB core. Install libsodium with your OS package manager or from <https://libsodium.org>.
+- a C/C++ build toolchain for `node-gyp`
+
+### Install From npm
+
+Build RocheDB core first:
 
 ```sh
-npm install rochedb
+git clone https://github.com/puffball1567/rochedb.git
+cd rochedb
+nimble install -y
+nim c --app:lib -d:release --nimcache:/tmp/nimcache_roche_capi -o:lib/librochedb.so src/rochedb_capi.nim
 ```
 
-For local development, keep the RocheDB core repository next to this repository:
+Install the package in your application with `ROCHEDB_CORE_DIR` set:
+
+```sh
+cd /path/to/your-app
+ROCHEDB_CORE_DIR=/path/to/rochedb npm install rochedb
+```
+
+If you installed the package before building RocheDB core, rebuild the native addon:
+
+```sh
+ROCHEDB_CORE_DIR=/path/to/rochedb npm rebuild rochedb
+```
+
+Run your app with the RocheDB shared library on the dynamic loader path:
+
+```sh
+LD_LIBRARY_PATH=/path/to/rochedb/lib node app.mjs
+```
+
+On macOS, use `DYLD_LIBRARY_PATH`:
+
+```sh
+DYLD_LIBRARY_PATH=/path/to/rochedb/lib node app.mjs
+```
+
+### Smoke Demo
+
+Clone this driver repository if you want to run the included demo:
+
+```sh
+git clone https://github.com/puffball1567/rochedb-js.git
+cd rochedb-js
+ROCHEDB_CORE_DIR=/path/to/rochedb npm install
+ROCHEDB_CORE_DIR=/path/to/rochedb npm run build
+LD_LIBRARY_PATH=/path/to/rochedb/lib node examples/embedded.mjs
+```
+
+For Bun compatibility:
+
+```sh
+LD_LIBRARY_PATH=/path/to/rochedb/lib bun examples/embedded.mjs
+```
+
+### Development From Source
+
+For local driver development, keep the RocheDB core repository next to this repository:
 
 ```text
 oss/
