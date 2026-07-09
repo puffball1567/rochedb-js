@@ -98,6 +98,8 @@ Implemented in this driver:
 - Auth connect: username, password, auth token, secret key, galaxy
 - Write: `put`, `putJson`, `putVec`
 - Read: `get`, `getString`, `batchGet`, `batchGetStrings`
+- ID helpers: `parseRocheId`, `formatRocheId`
+- Typed errors: `RocheDbError`, `isRocheDbError`
 - Selection query: `query`, `queryString`
 - Vector retrieval: `retrieve`
 - Atlas / map output: `atlas`
@@ -126,6 +128,12 @@ Run the Bun compatibility path:
 ```sh
 LD_LIBRARY_PATH=../rochedb/lib npm run test:bun
 LD_LIBRARY_PATH=../rochedb/lib bun examples/embedded.mjs
+```
+
+Check package contents before publishing:
+
+```sh
+ROCHEDB_CORE_DIR=../rochedb LD_LIBRARY_PATH=../rochedb/lib npm pack --dry-run
 ```
 
 Run the embedded demo:
