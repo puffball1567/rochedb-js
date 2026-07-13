@@ -12,21 +12,33 @@ try {
     role: "admin",
   });
 
-  const docId = db.putVec(
+  const docId = db.putJsonVec(
     "docs/nim",
-    "RocheDB uses explicit rings to reduce unnecessary reads before retrieval.",
+    {
+      title: "RocheDB rings",
+      lang: "nim",
+      body: "RocheDB uses explicit rings to reduce unnecessary reads before retrieval.",
+    },
     [1, 0, 0],
   );
 
   const profile = db.getString(profileId);
+  const encoded = db.getEncoded(profileId);
   const batch = db.batchGetStrings([profileId, docId]);
+  const page = db.readRing("users/42/profile", {
+    filter: { role: "admin" },
+    selection: "{ name }",
+    limit: 10,
+  });
   const retrieved = db.retrieve([1, 0, 0], {
     ring: "docs/nim",
     budget: 4,
   });
 
   console.log("profile:", profile);
+  console.log("profile codec:", encoded?.codec);
   console.log("batch:", batch);
+  console.log("readRing:", page);
   console.log("retrieve stats:", retrieved.stats);
   console.log("atlas ringMap:", db.atlas(undefined, 4).ringMap?.length ?? 0);
   console.log("doc node:", db.locate(docId));

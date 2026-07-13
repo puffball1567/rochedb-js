@@ -17,18 +17,44 @@ export function runEmbeddedCheck(assert) {
       name: "Ada",
       role: "admin",
     });
-    const docA = db.putVec("docs/nim", "nim database", [1, 0, 0]);
+    const docA = db.putJsonVec("docs/nim", {
+      title: "nim database",
+      lang: "nim",
+    }, [1, 0, 0]);
     const docB = db.putVec("docs/js", "javascript driver", [0, 1, 0]);
 
     assert.equal(db.getString(profileId), '{"name":"Ada","role":"admin"}');
+    const encodedProfile = db.getEncoded(profileId);
+    assert.equal(encodedProfile.codec, "json");
+    assert.equal(new TextDecoder().decode(encodedProfile.data), '{"name":"Ada","role":"admin"}');
     assert.deepEqual(parseRocheId(formatRocheId(profileId)), profileId);
-    assert.deepEqual(db.batchGetStrings([profileId, docA]), [
+    assert.deepEqual(db.batchGetStrings([profileId]), [
       '{"name":"Ada","role":"admin"}',
-      "nim database",
     ]);
 
     const selection = db.queryString(profileId, "{ name }");
     assert.match(selection, /Ada/);
+
+    const page = db.readRing("users/42/profile", {
+      filter: { role: "admin" },
+      selection: "{ name }",
+      limit: 1,
+      rsort: "time",
+    });
+    assert.equal(page.count, 1);
+    assert.equal(page.items.length, 1);
+    assert.deepEqual(page.items[0].payload, { name: "Ada" });
+    assert.equal(page.sort, "time");
+    assert.equal(page.sortDirection, "desc");
+
+    const bifId = db.putBifVec("artifacts/bif", new Uint8Array([1, 2, 3, 4]), [0, 0, 1]);
+    const encodedBif = db.getEncoded(bifId);
+    assert.equal(encodedBif.codec, "bif");
+    assert.deepEqual([...encodedBif.data], [1, 2, 3, 4]);
+    const bifPage = db.readRing("artifacts/bif", { limit: 1 });
+    assert.equal(bifPage.count, 1);
+    assert.equal(bifPage.items[0].codec, "bif");
+    assert.equal(bifPage.items[0].encoding, "base64");
 
     const retrieved = db.retrieve([1, 0, 0], {
       ring: "docs/nim",
