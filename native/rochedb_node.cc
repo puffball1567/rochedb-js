@@ -46,6 +46,12 @@ bool IsTypedArray(napi_env env, napi_value value) {
   return is_typed_array;
 }
 
+bool IsArrayBuffer(napi_env env, napi_value value) {
+  bool is_array_buffer = false;
+  napi_is_arraybuffer(env, value, &is_array_buffer);
+  return is_array_buffer;
+}
+
 bool IsNullOrUndefined(napi_env env, napi_value value) {
   napi_valuetype type;
   napi_typeof(env, value, &type);
@@ -130,6 +136,30 @@ napi_value IdObject(napi_env env, roche_id id) {
   return obj;
 }
 
+napi_value CodecString(napi_env env, int codec) {
+  const char *name = "raw";
+  switch (codec) {
+    case ROCHE_CODEC_RAW:
+      name = "raw";
+      break;
+    case ROCHE_CODEC_JSON:
+      name = "json";
+      break;
+    case ROCHE_CODEC_NIF:
+      name = "nif";
+      break;
+    case ROCHE_CODEC_BIF:
+      name = "bif";
+      break;
+    default:
+      name = "unknown";
+      break;
+  }
+  napi_value out;
+  napi_create_string_utf8(env, name, NAPI_AUTO_LENGTH, &out);
+  return out;
+}
+
 void FinalizeDb(napi_env, void *data, void *) {
   DbHandle *handle = reinterpret_cast<DbHandle *>(data);
   if (handle != nullptr) {
@@ -157,12 +187,53 @@ struct BytesArg {
   size_t len = 0;
 };
 
+size_t TypedArrayElementSize(napi_typedarray_type type) {
+  switch (type) {
+    case napi_int8_array:
+    case napi_uint8_array:
+    case napi_uint8_clamped_array:
+      return 1;
+    case napi_int16_array:
+    case napi_uint16_array:
+      return 2;
+    case napi_int32_array:
+    case napi_uint32_array:
+    case napi_float32_array:
+      return 4;
+    case napi_float64_array:
+    case napi_bigint64_array:
+    case napi_biguint64_array:
+      return 8;
+    default:
+      return 1;
+  }
+}
+
 BytesArg DataArg(napi_env env, napi_value value, std::string &string_storage) {
   BytesArg out;
   if (IsBuffer(env, value)) {
     void *data = nullptr;
     size_t len = 0;
     napi_get_buffer_info(env, value, &data, &len);
+    out.data = data;
+    out.len = len;
+    return out;
+  }
+  if (IsTypedArray(env, value)) {
+    napi_typedarray_type type;
+    size_t len = 0;
+    void *data = nullptr;
+    napi_value array_buffer;
+    size_t byte_offset = 0;
+    napi_get_typedarray_info(env, value, &type, &len, &data, &array_buffer, &byte_offset);
+    out.data = data;
+    out.len = len * TypedArrayElementSize(type);
+    return out;
+  }
+  if (IsArrayBuffer(env, value)) {
+    void *data = nullptr;
+    size_t len = 0;
+    napi_get_arraybuffer_info(env, value, &data, &len);
     out.data = data;
     out.len = len;
     return out;
@@ -295,6 +366,37 @@ napi_value Put(napi_env env, napi_callback_info info) {
   return IdObject(env, id);
 }
 
+napi_value PutCodec(napi_env env, napi_callback_info info) {
+  size_t argc = 5;
+  napi_value args[5];
+  napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+  if (argc < 4) {
+    Throw(env, "putCodec requires db, ring, data, and codec");
+    return nullptr;
+  }
+  DbHandle *handle = DbArg(env, args[0]);
+  if (handle == nullptr) return nullptr;
+  std::string ring = StringArg(env, args[1]);
+  std::string storage;
+  BytesArg data = DataArg(env, args[2], storage);
+  int codec = IntArg(env, args[3]);
+  roche_id id{};
+  int rc = ROCHE_ERR;
+  if (argc >= 5) {
+    FloatVecArg vec = VecArg(env, args[4]);
+    if (vec.data == nullptr && vec.len == 0) return nullptr;
+    rc = roche_put_vec_codec(handle->db, ring.c_str(), data.data, data.len,
+                             codec, vec.data, vec.len, &id);
+  } else {
+    rc = roche_put_codec(handle->db, ring.c_str(), data.data, data.len, codec, &id);
+  }
+  if (rc != ROCHE_OK) {
+    ThrowLast(env);
+    return nullptr;
+  }
+  return IdObject(env, id);
+}
+
 napi_value Get(napi_env env, napi_callback_info info) {
   size_t argc = 2;
   napi_value args[2];
@@ -313,6 +415,32 @@ napi_value Get(napi_env env, napi_callback_info info) {
   napi_create_buffer_copy(env, len, p, nullptr, &buf);
   roche_free(p);
   return buf;
+}
+
+napi_value GetEncoded(napi_env env, napi_callback_info info) {
+  size_t argc = 2;
+  napi_value args[2];
+  napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+  if (argc < 2) {
+    Throw(env, "getEncoded requires db and id");
+    return nullptr;
+  }
+  DbHandle *handle = DbArg(env, args[0]);
+  if (handle == nullptr) return nullptr;
+  roche_id id = IdArg(env, args[1]);
+  size_t len = 0;
+  int codec = ROCHE_CODEC_RAW;
+  void *p = roche_get_codec(handle->db, id, &len, &codec);
+  if (p == nullptr) return Null(env);
+
+  napi_value out;
+  napi_create_object(env, &out);
+  napi_value data;
+  napi_create_buffer_copy(env, len, p, nullptr, &data);
+  roche_free(p);
+  napi_set_named_property(env, out, "data", data);
+  napi_set_named_property(env, out, "codec", CodecString(env, codec));
+  return out;
 }
 
 napi_value BatchGet(napi_env env, napi_callback_info info) {
@@ -386,6 +514,41 @@ napi_value Query(napi_env env, napi_callback_info info) {
   napi_create_buffer_copy(env, len, p, nullptr, &buf);
   roche_free(p);
   return buf;
+}
+
+napi_value ReadRingJson(napi_env env, napi_callback_info info) {
+  size_t argc = 11;
+  napi_value args[11];
+  napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+  if (argc < 11) {
+    Throw(env, "readRingJson requires db, ring, filterJson, selection, limit, cursor, pagination, page, pageLimit, sortField, and sortDesc");
+    return nullptr;
+  }
+  DbHandle *handle = DbArg(env, args[0]);
+  if (handle == nullptr) return nullptr;
+  std::string ring = StringArg(env, args[1]);
+  std::string filter_json = StringArg(env, args[2]);
+  std::string selection = StringArg(env, args[3]);
+  int limit = IntArg(env, args[4]);
+  std::string cursor = StringArg(env, args[5]);
+  int pagination = IntArg(env, args[6]);
+  int page = IntArg(env, args[7]);
+  int page_limit = IntArg(env, args[8]);
+  std::string sort_field = StringArg(env, args[9]);
+  int sort_desc = IntArg(env, args[10]);
+  size_t len = 0;
+  void *p = roche_read_ring_json(handle->db, ring.c_str(), filter_json.c_str(),
+                                 selection.c_str(), limit, cursor.c_str(),
+                                 pagination, page, page_limit,
+                                 sort_field.c_str(), sort_desc, &len);
+  if (p == nullptr) {
+    ThrowLast(env);
+    return nullptr;
+  }
+  napi_value str;
+  napi_create_string_utf8(env, reinterpret_cast<const char *>(p), len, &str);
+  roche_free(p);
+  return str;
 }
 
 napi_value Retrieve(napi_env env, napi_callback_info info) {
@@ -628,9 +791,12 @@ napi_value Init(napi_env env, napi_value exports) {
     {"connectAuth", nullptr, ConnectAuth, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"close", nullptr, Close, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"put", nullptr, Put, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"putCodec", nullptr, PutCodec, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"get", nullptr, Get, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"getEncoded", nullptr, GetEncoded, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"batchGet", nullptr, BatchGet, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"query", nullptr, Query, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"readRingJson", nullptr, ReadRingJson, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"retrieve", nullptr, Retrieve, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"atlas", nullptr, Atlas, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"locate", nullptr, Locate, nullptr, nullptr, nullptr, napi_default, nullptr},

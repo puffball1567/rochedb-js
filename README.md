@@ -10,7 +10,7 @@ This package currently targets Node.js through Node-API. Bun can load the same N
 - Runtime target: Node.js 20+
 - Source language: TypeScript
 - Native boundary: Node-API, no `node-addon-api` dependency
-- RocheDB core: local C ABI shared library
+- RocheDB core: local C ABI v2 shared library, RocheDB core v0.3.0+
 - Bun: experimental, local demo/test path available
 
 ## Install
@@ -131,18 +131,30 @@ try {
 
   console.log(db.getString(id));
 
-  const docId = db.putVec(
+  const docId = db.putJsonVec(
     "docs/nim",
-    "RocheDB stores explicit rings and vectors together.",
+    {
+      title: "RocheDB rings",
+      body: "RocheDB stores explicit rings and vectors together.",
+    },
     [1, 0, 0],
   );
+
+  const encoded = db.getEncoded(id);
+  console.log(encoded?.codec);
+
+  const page = db.readRing("users/42/profile", {
+    filter: { role: "admin" },
+    selection: "{ name }",
+    limit: 10,
+  });
 
   const result = db.retrieve([1, 0, 0], {
     ring: "docs/nim",
     budget: 4,
   });
 
-  console.log(docId, result.stats);
+  console.log(docId, page, result.stats);
 } finally {
   db.close();
 }
@@ -156,8 +168,11 @@ Implemented in this driver:
 - Persistent embedded open: `RocheDb.openDir(nodes, dir)`
 - TCP connect: `RocheDb.connect(peers, options?)`
 - Auth connect: username, password, auth token, secret key, galaxy
-- Write: `put`, `putJson`, `putVec`
-- Read: `get`, `getString`, `batchGet`, `batchGetStrings`
+- Write: `put`, `putCodec`, `putJson`, `putNif`, `putBif`, `putVec`,
+  `putVecCodec`, `putJsonVec`, `putNifVec`, `putBifVec`
+- Read: `get`, `getEncoded`, `getString`, `batchGet`, `batchGetStrings`,
+  `readRing`
+- Payload codecs: `PayloadCodec`, `EncodedPayload`
 - ID helpers: `parseRocheId`, `formatRocheId`
 - Typed errors: `RocheDbError`, `isRocheDbError`
 - Selection query: `query`, `queryString`
