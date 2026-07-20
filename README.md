@@ -1,64 +1,64 @@
-# RocheDB JavaScript / TypeScript Driver
+# KoutenDB JavaScript / TypeScript Driver
 
-JavaScript / TypeScript driver for RocheDB.
+JavaScript / TypeScript driver for KoutenDB.
 
 This package currently targets Node.js through Node-API. Bun can load the same Node-API module in the local verification path, but Bun support should remain experimental until it is covered by CI.
 
 ## Status
 
-- Package: `rochedb`
+- Package: `koutendb`
 - Runtime target: Node.js 20+
 - Source language: TypeScript
 - Native boundary: Node-API, no `node-addon-api` dependency
-- RocheDB core: local C ABI v2 shared library, RocheDB core v0.3.0+
+- KoutenDB core: local C ABI v2 shared library, KoutenDB core v0.3.0+
 - Bun: experimental, local demo/test path available
 
 ## Install
 
-This driver is a Node-API addon over the RocheDB C ABI. Install the JavaScript
-package and make the RocheDB shared library available before running your app.
+This driver is a Node-API addon over the KoutenDB C ABI. Install the JavaScript
+package and make the KoutenDB shared library available before running your app.
 
 Prerequisites:
 
 - Node.js 20+
-- Nim 2.2.x to build RocheDB core. Install Nim: <https://nim-lang.org/install.html>. Nimble is included with the standard Nim installation.
-- `libsodium` development headers, required by RocheDB core. Install libsodium with your OS package manager or from <https://libsodium.org>.
+- Nim 2.2.x to build KoutenDB core. Install Nim: <https://nim-lang.org/install.html>. Nimble is included with the standard Nim installation.
+- `libsodium` development headers, required by KoutenDB core. Install libsodium with your OS package manager or from <https://libsodium.org>.
 - a C/C++ build toolchain for `node-gyp`
 
 ### Install From npm
 
-Build RocheDB core first:
+Build KoutenDB core first:
 
 ```sh
-git clone https://github.com/puffball1567/rochedb.git
-cd rochedb
+git clone https://github.com/puffball1567/koutendb.git
+cd koutendb
 nimble install -y
-nim c --app:lib -d:release --nimcache:/tmp/nimcache_roche_capi -o:lib/librochedb.so src/rochedb_capi.nim
+nim c --app:lib -d:release --nimcache:/tmp/nimcache_kouten_capi -o:lib/libkoutendb.so src/koutendb_capi.nim
 ```
 
-Install the package in your application with `ROCHEDB_CORE_DIR` set:
+Install the package in your application with `KOUTENDB_CORE_DIR` set:
 
 ```sh
 cd /path/to/your-app
-ROCHEDB_CORE_DIR=/path/to/rochedb npm install rochedb
+KOUTENDB_CORE_DIR=/path/to/koutendb npm install koutendb
 ```
 
-If you installed the package before building RocheDB core, rebuild the native addon:
+If you installed the package before building KoutenDB core, rebuild the native addon:
 
 ```sh
-ROCHEDB_CORE_DIR=/path/to/rochedb npm rebuild rochedb
+KOUTENDB_CORE_DIR=/path/to/koutendb npm rebuild koutendb
 ```
 
-Run your app with the RocheDB shared library on the dynamic loader path:
+Run your app with the KoutenDB shared library on the dynamic loader path:
 
 ```sh
-LD_LIBRARY_PATH=/path/to/rochedb/lib node app.mjs
+LD_LIBRARY_PATH=/path/to/koutendb/lib node app.mjs
 ```
 
 On macOS, use `DYLD_LIBRARY_PATH`:
 
 ```sh
-DYLD_LIBRARY_PATH=/path/to/rochedb/lib node app.mjs
+DYLD_LIBRARY_PATH=/path/to/koutendb/lib node app.mjs
 ```
 
 ### Smoke Demo
@@ -66,62 +66,62 @@ DYLD_LIBRARY_PATH=/path/to/rochedb/lib node app.mjs
 Clone this driver repository if you want to run the included demo:
 
 ```sh
-git clone https://github.com/puffball1567/rochedb-js.git
-cd rochedb-js
-ROCHEDB_CORE_DIR=/path/to/rochedb npm install
-ROCHEDB_CORE_DIR=/path/to/rochedb npm run build
-LD_LIBRARY_PATH=/path/to/rochedb/lib node examples/embedded.mjs
+git clone https://github.com/puffball1567/koutendb-js.git
+cd koutendb-js
+KOUTENDB_CORE_DIR=/path/to/koutendb npm install
+KOUTENDB_CORE_DIR=/path/to/koutendb npm run build
+LD_LIBRARY_PATH=/path/to/koutendb/lib node examples/embedded.mjs
 ```
 
 For Bun compatibility:
 
 ```sh
-LD_LIBRARY_PATH=/path/to/rochedb/lib bun examples/embedded.mjs
+LD_LIBRARY_PATH=/path/to/koutendb/lib bun examples/embedded.mjs
 ```
 
 ### Development From Source
 
-For local driver development, keep the RocheDB core repository next to this repository:
+For local driver development, keep the KoutenDB core repository next to this repository:
 
 ```text
 oss/
-  rochedb/
-  rochedb-js/
+  koutendb/
+  koutendb-js/
 ```
 
-Build the RocheDB C ABI shared library first:
+Build the KoutenDB C ABI shared library first:
 
 ```sh
-cd ../rochedb
-nim c --app:lib -d:release --nimcache:/tmp/nimcache_roche_capi -o:lib/librochedb.so src/rochedb_capi.nim
+cd ../koutendb
+nim c --app:lib -d:release --nimcache:/tmp/nimcache_kouten_capi -o:lib/libkoutendb.so src/koutendb_capi.nim
 ```
 
 Then build this driver:
 
 ```sh
-cd ../rochedb-js
-ROCHEDB_CORE_DIR=../rochedb npm install
-ROCHEDB_CORE_DIR=../rochedb npm run build
+cd ../koutendb-js
+KOUTENDB_CORE_DIR=../koutendb npm install
+KOUTENDB_CORE_DIR=../koutendb npm run build
 ```
 
 If the core repository is in a different location, set:
 
-- `ROCHEDB_CORE_DIR`: RocheDB repository path. The build expects `include/rochedb.h` and `lib/librochedb.so` below it.
-- `ROCHEDB_LIB_DIR`: optional library directory override.
-- `ROCHEDB_NATIVE_PATH`: optional runtime override for the built `.node` file.
+- `KOUTENDB_CORE_DIR`: KoutenDB repository path. The build expects `include/koutendb.h` and `lib/libkoutendb.so` below it.
+- `KOUTENDB_LIB_DIR`: optional library directory override.
+- `KOUTENDB_NATIVE_PATH`: optional runtime override for the built `.node` file.
 
-At runtime, make sure the dynamic loader can find `librochedb.so`:
+At runtime, make sure the dynamic loader can find `libkoutendb.so`:
 
 ```sh
-LD_LIBRARY_PATH=../rochedb/lib node examples/embedded.mjs
+LD_LIBRARY_PATH=../koutendb/lib node examples/embedded.mjs
 ```
 
 ## Quick Start
 
 ```ts
-import { RocheDb } from "rochedb";
+import { KoutenDb } from "koutendb";
 
-const db = RocheDb.open(4);
+const db = KoutenDb.open(4);
 
 try {
   const id = db.putJson("users/42/profile", {
@@ -134,8 +134,8 @@ try {
   const docId = db.putJsonVec(
     "docs/nim",
     {
-      title: "RocheDB rings",
-      body: "RocheDB stores explicit rings and vectors together.",
+      title: "KoutenDB rings",
+      body: "KoutenDB stores explicit rings and vectors together.",
     },
     [1, 0, 0],
   );
@@ -160,21 +160,51 @@ try {
 }
 ```
 
+## TLS
+
+TLS requires a KoutenDB core built with `-d:ssl`. The shared library from
+`scripts/build_capi.sh` is built with it; a library built without it fails a TLS
+connect with `TLS support requires building KoutenDB with -d:ssl`.
+
+To reach a server whose certificate is signed by a private CA — or is
+self-signed — point at the certificate PEM. Verification stays on:
+
+```ts
+const db = KoutenDb.connect("127.0.0.1:17651", {
+  username: "alice",
+  password: "secret",
+  tlsCaFile: "/path/to/server.crt",
+});
+```
+
+`dangerouslyAcceptInvalidCerts: true` disables certificate verification. The
+connection is then encrypted but unauthenticated and trivially impersonable, so
+it is for local smoke tests only — never a production server. Prefer `tlsCaFile`
+for self-signed certificates.
+
+**Node caveat:** Node bundles its own OpenSSL, which can collide with the system
+OpenSSL the core loads. TLS connections still fail closed when verification
+fails, but the error *message* may be lost. The driver rewrites the empty
+OpenSSL sentinel (`No error reported.`) into a hint that points at certificate
+verification; the underlying failure is unchanged.
+
 ## API Coverage
 
 Implemented in this driver:
 
-- Embedded open: `RocheDb.open(nodes)`
-- Persistent embedded open: `RocheDb.openDir(nodes, dir)`
-- TCP connect: `RocheDb.connect(peers, options?)`
+- Embedded open: `KoutenDb.open(nodes)`
+- Persistent embedded open: `KoutenDb.openDir(nodes, dir)`
+- TCP connect: `KoutenDb.connect(peers, options?)`
 - Auth connect: username, password, auth token, secret key, galaxy
+- TLS connect: `tls`, `tlsCaFile`, `tlsServerName`, `dangerouslyAcceptInvalidCerts`
+- ABI version: `abiVersion()`
 - Write: `put`, `putCodec`, `putJson`, `putNif`, `putBif`, `putVec`,
   `putVecCodec`, `putJsonVec`, `putNifVec`, `putBifVec`
 - Read: `get`, `getEncoded`, `getString`, `batchGet`, `batchGetStrings`,
   `readRing`
 - Payload codecs: `PayloadCodec`, `EncodedPayload`
-- ID helpers: `parseRocheId`, `formatRocheId`
-- Typed errors: `RocheDbError`, `isRocheDbError`
+- ID helpers: `parseKoutenId`, `formatKoutenId`
+- Typed errors: `KoutenDbError`, `isKoutenDbError`
 - Selection query: `query`, `queryString`
 - Vector retrieval: `retrieve`
 - Atlas / map output: `atlas`
@@ -194,31 +224,31 @@ Still pending:
 Run the Node.js verification path:
 
 ```sh
-ROCHEDB_CORE_DIR=../rochedb npm run build
-LD_LIBRARY_PATH=../rochedb/lib npm run test:node
+KOUTENDB_CORE_DIR=../koutendb npm run build
+LD_LIBRARY_PATH=../koutendb/lib npm run test:node
 ```
 
 Run the Bun compatibility path:
 
 ```sh
-LD_LIBRARY_PATH=../rochedb/lib npm run test:bun
-LD_LIBRARY_PATH=../rochedb/lib bun examples/embedded.mjs
+LD_LIBRARY_PATH=../koutendb/lib npm run test:bun
+LD_LIBRARY_PATH=../koutendb/lib bun examples/embedded.mjs
 ```
 
 Check package contents before publishing:
 
 ```sh
-ROCHEDB_CORE_DIR=../rochedb LD_LIBRARY_PATH=../rochedb/lib npm pack --dry-run
+KOUTENDB_CORE_DIR=../koutendb LD_LIBRARY_PATH=../koutendb/lib npm pack --dry-run
 ```
 
 Run the embedded demo:
 
 ```sh
-LD_LIBRARY_PATH=../rochedb/lib node examples/embedded.mjs
+LD_LIBRARY_PATH=../koutendb/lib node examples/embedded.mjs
 ```
 
 ## Notes on Binary Data
 
 The JavaScript API accepts payloads as `string` or `Uint8Array`.
 
-Vectors are passed as `Float32Array` or `number[]`. At the C ABI boundary this uses host-native `float32` arrays. RocheDB's TCP wire protocol has its own canonical little-endian float32 vector representation.
+Vectors are passed as `Float32Array` or `number[]`. At the C ABI boundary this uses host-native `float32` arrays. KoutenDB's TCP wire protocol has its own canonical little-endian float32 vector representation.

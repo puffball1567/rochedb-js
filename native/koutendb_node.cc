@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "rochedb.h"
+#include "koutendb.h"
 
 namespace {
 
@@ -30,8 +30,8 @@ void Throw(napi_env env, const char *message) {
 }
 
 void ThrowLast(napi_env env) {
-  const char *message = roche_last_error();
-  Throw(env, message && message[0] ? message : "RocheDB C ABI error");
+  const char *message = kouten_last_error();
+  Throw(env, message && message[0] ? message : "KoutenDB C ABI error");
 }
 
 bool IsBuffer(napi_env env, napi_value value) {
@@ -83,14 +83,14 @@ DbHandle *DbArg(napi_env env, napi_value value) {
   DbHandle *handle = nullptr;
   napi_get_value_external(env, value, reinterpret_cast<void **>(&handle));
   if (handle == nullptr || handle->db == nullptr) {
-    Throw(env, "RocheDB handle is closed");
+    Throw(env, "KoutenDB handle is closed");
     return nullptr;
   }
   return handle;
 }
 
-roche_id IdArg(napi_env env, napi_value value) {
-  roche_id id{};
+kouten_id IdArg(napi_env env, napi_value value) {
+  kouten_id id{};
   napi_value field;
   bool lossless = false;
 
@@ -113,7 +113,7 @@ roche_id IdArg(napi_env env, napi_value value) {
   return id;
 }
 
-napi_value IdObject(napi_env env, roche_id id) {
+napi_value IdObject(napi_env env, kouten_id id) {
   napi_value obj;
   napi_create_object(env, &obj);
 
@@ -139,16 +139,16 @@ napi_value IdObject(napi_env env, roche_id id) {
 napi_value CodecString(napi_env env, int codec) {
   const char *name = "raw";
   switch (codec) {
-    case ROCHE_CODEC_RAW:
+    case KOUTEN_CODEC_RAW:
       name = "raw";
       break;
-    case ROCHE_CODEC_JSON:
+    case KOUTEN_CODEC_JSON:
       name = "json";
       break;
-    case ROCHE_CODEC_NIF:
+    case KOUTEN_CODEC_NIF:
       name = "nif";
       break;
-    case ROCHE_CODEC_BIF:
+    case KOUTEN_CODEC_BIF:
       name = "bif";
       break;
     default:
@@ -164,7 +164,7 @@ void FinalizeDb(napi_env, void *data, void *) {
   DbHandle *handle = reinterpret_cast<DbHandle *>(data);
   if (handle != nullptr) {
     if (handle->db != nullptr) {
-      roche_close(handle->db);
+      kouten_close(handle->db);
       handle->db = nullptr;
     }
     delete handle;
@@ -275,7 +275,7 @@ napi_value Open(napi_env env, napi_callback_info info) {
   napi_value args[1];
   napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
   int nodes = argc > 0 ? IntArg(env, args[0]) : 8;
-  return ExternalDb(env, roche_open(nodes));
+  return ExternalDb(env, kouten_open(nodes));
 }
 
 napi_value OpenDir(napi_env env, napi_callback_info info) {
@@ -288,7 +288,7 @@ napi_value OpenDir(napi_env env, napi_callback_info info) {
   }
   int nodes = IntArg(env, args[0]);
   std::string dir = StringArg(env, args[1]);
-  return ExternalDb(env, roche_open_dir(nodes, dir.c_str()));
+  return ExternalDb(env, kouten_open_dir(nodes, dir.c_str()));
 }
 
 napi_value Connect(napi_env env, napi_callback_info info) {
@@ -300,7 +300,7 @@ napi_value Connect(napi_env env, napi_callback_info info) {
     return nullptr;
   }
   std::string peers = StringArg(env, args[0]);
-  return ExternalDb(env, roche_connect(peers.c_str()));
+  return ExternalDb(env, kouten_connect(peers.c_str()));
 }
 
 napi_value ConnectAuth(napi_env env, napi_callback_info info) {
@@ -317,9 +317,41 @@ napi_value ConnectAuth(napi_env env, napi_callback_info info) {
   std::string auth_token = argc > 3 ? StringArg(env, args[3]) : "";
   std::string secret_key = argc > 4 ? StringArg(env, args[4]) : "";
   std::string galaxy = argc > 5 ? StringArg(env, args[5]) : "";
-  return ExternalDb(env, roche_connect_auth(peers.c_str(), username.c_str(),
+  return ExternalDb(env, kouten_connect_auth(peers.c_str(), username.c_str(),
                                             password.c_str(), auth_token.c_str(),
                                             secret_key.c_str(), galaxy.c_str()));
+}
+
+napi_value ConnectAuthTls(napi_env env, napi_callback_info info) {
+  size_t argc = 10;
+  napi_value args[10];
+  napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+  if (argc < 1) {
+    Throw(env, "connectAuthTls requires peers");
+    return nullptr;
+  }
+  std::string peers = StringArg(env, args[0]);
+  std::string username = argc > 1 ? StringArg(env, args[1]) : "";
+  std::string password = argc > 2 ? StringArg(env, args[2]) : "";
+  std::string auth_token = argc > 3 ? StringArg(env, args[3]) : "";
+  std::string secret_key = argc > 4 ? StringArg(env, args[4]) : "";
+  std::string galaxy = argc > 5 ? StringArg(env, args[5]) : "";
+  int tls = argc > 6 ? IntArg(env, args[6]) : 0;
+  std::string tls_ca_file = argc > 7 ? StringArg(env, args[7]) : "";
+  std::string tls_server_name = argc > 8 ? StringArg(env, args[8]) : "";
+  int tls_insecure_skip_verify = argc > 9 ? IntArg(env, args[9]) : 0;
+  return ExternalDb(env, kouten_connect_auth_tls(
+                             peers.c_str(), username.c_str(), password.c_str(),
+                             auth_token.c_str(), secret_key.c_str(),
+                             galaxy.c_str(), tls, tls_ca_file.c_str(),
+                             tls_server_name.c_str(), tls_insecure_skip_verify));
+}
+
+napi_value AbiVersion(napi_env env, napi_callback_info info) {
+  (void)info;
+  napi_value out;
+  napi_create_int32(env, kouten_abi_version(), &out);
+  return out;
 }
 
 napi_value Close(napi_env env, napi_callback_info info) {
@@ -332,7 +364,7 @@ napi_value Close(napi_env env, napi_callback_info info) {
   }
   DbHandle *handle = DbArg(env, args[0]);
   if (handle == nullptr) return nullptr;
-  roche_close(handle->db);
+  kouten_close(handle->db);
   handle->db = nullptr;
   return Undefined(env);
 }
@@ -350,16 +382,16 @@ napi_value Put(napi_env env, napi_callback_info info) {
   std::string ring = StringArg(env, args[1]);
   std::string storage;
   BytesArg data = DataArg(env, args[2], storage);
-  roche_id id{};
-  int rc = ROCHE_ERR;
+  kouten_id id{};
+  int rc = KOUTEN_ERR;
   if (argc >= 4) {
     FloatVecArg vec = VecArg(env, args[3]);
     if (vec.data == nullptr && vec.len == 0) return nullptr;
-    rc = roche_put_vec(handle->db, ring.c_str(), data.data, data.len, vec.data, vec.len, &id);
+    rc = kouten_put_vec(handle->db, ring.c_str(), data.data, data.len, vec.data, vec.len, &id);
   } else {
-    rc = roche_put(handle->db, ring.c_str(), data.data, data.len, &id);
+    rc = kouten_put(handle->db, ring.c_str(), data.data, data.len, &id);
   }
-  if (rc != ROCHE_OK) {
+  if (rc != KOUTEN_OK) {
     ThrowLast(env);
     return nullptr;
   }
@@ -380,17 +412,17 @@ napi_value PutCodec(napi_env env, napi_callback_info info) {
   std::string storage;
   BytesArg data = DataArg(env, args[2], storage);
   int codec = IntArg(env, args[3]);
-  roche_id id{};
-  int rc = ROCHE_ERR;
+  kouten_id id{};
+  int rc = KOUTEN_ERR;
   if (argc >= 5) {
     FloatVecArg vec = VecArg(env, args[4]);
     if (vec.data == nullptr && vec.len == 0) return nullptr;
-    rc = roche_put_vec_codec(handle->db, ring.c_str(), data.data, data.len,
+    rc = kouten_put_vec_codec(handle->db, ring.c_str(), data.data, data.len,
                              codec, vec.data, vec.len, &id);
   } else {
-    rc = roche_put_codec(handle->db, ring.c_str(), data.data, data.len, codec, &id);
+    rc = kouten_put_codec(handle->db, ring.c_str(), data.data, data.len, codec, &id);
   }
-  if (rc != ROCHE_OK) {
+  if (rc != KOUTEN_OK) {
     ThrowLast(env);
     return nullptr;
   }
@@ -407,13 +439,13 @@ napi_value Get(napi_env env, napi_callback_info info) {
   }
   DbHandle *handle = DbArg(env, args[0]);
   if (handle == nullptr) return nullptr;
-  roche_id id = IdArg(env, args[1]);
+  kouten_id id = IdArg(env, args[1]);
   size_t len = 0;
-  void *p = roche_get(handle->db, id, &len);
+  void *p = kouten_get(handle->db, id, &len);
   if (p == nullptr) return Null(env);
   napi_value buf;
   napi_create_buffer_copy(env, len, p, nullptr, &buf);
-  roche_free(p);
+  kouten_free(p);
   return buf;
 }
 
@@ -427,17 +459,17 @@ napi_value GetEncoded(napi_env env, napi_callback_info info) {
   }
   DbHandle *handle = DbArg(env, args[0]);
   if (handle == nullptr) return nullptr;
-  roche_id id = IdArg(env, args[1]);
+  kouten_id id = IdArg(env, args[1]);
   size_t len = 0;
-  int codec = ROCHE_CODEC_RAW;
-  void *p = roche_get_codec(handle->db, id, &len, &codec);
+  int codec = KOUTEN_CODEC_RAW;
+  void *p = kouten_get_codec(handle->db, id, &len, &codec);
   if (p == nullptr) return Null(env);
 
   napi_value out;
   napi_create_object(env, &out);
   napi_value data;
   napi_create_buffer_copy(env, len, p, nullptr, &data);
-  roche_free(p);
+  kouten_free(p);
   napi_set_named_property(env, out, "data", data);
   napi_set_named_property(env, out, "codec", CodecString(env, codec));
   return out;
@@ -463,14 +495,14 @@ napi_value BatchGet(napi_env env, napi_callback_info info) {
 
   uint32_t len = 0;
   napi_get_array_length(env, args[1], &len);
-  std::vector<roche_id> ids(len);
+  std::vector<kouten_id> ids(len);
   for (uint32_t i = 0; i < len; ++i) {
     napi_value item;
     napi_get_element(env, args[1], i, &item);
     ids[i] = IdArg(env, item);
   }
 
-  roche_batch_result *br = roche_batch_get(handle->db, ids.data(), ids.size());
+  kouten_batch_result *br = kouten_batch_get(handle->db, ids.data(), ids.size());
   if (br == nullptr) {
     ThrowLast(env);
     return nullptr;
@@ -488,7 +520,7 @@ napi_value BatchGet(napi_env env, napi_callback_info info) {
     napi_set_element(env, out, static_cast<uint32_t>(i), buf);
   }
 
-  roche_batch_get_free(br);
+  kouten_batch_get_free(br);
   return out;
 }
 
@@ -502,17 +534,17 @@ napi_value Query(napi_env env, napi_callback_info info) {
   }
   DbHandle *handle = DbArg(env, args[0]);
   if (handle == nullptr) return nullptr;
-  roche_id id = IdArg(env, args[1]);
+  kouten_id id = IdArg(env, args[1]);
   std::string selection = StringArg(env, args[2]);
   size_t len = 0;
-  void *p = roche_query(handle->db, id, selection.c_str(), &len);
+  void *p = kouten_query(handle->db, id, selection.c_str(), &len);
   if (p == nullptr) {
     ThrowLast(env);
     return nullptr;
   }
   napi_value buf;
   napi_create_buffer_copy(env, len, p, nullptr, &buf);
-  roche_free(p);
+  kouten_free(p);
   return buf;
 }
 
@@ -537,7 +569,7 @@ napi_value ReadRingJson(napi_env env, napi_callback_info info) {
   std::string sort_field = StringArg(env, args[9]);
   int sort_desc = IntArg(env, args[10]);
   size_t len = 0;
-  void *p = roche_read_ring_json(handle->db, ring.c_str(), filter_json.c_str(),
+  void *p = kouten_read_ring_json(handle->db, ring.c_str(), filter_json.c_str(),
                                  selection.c_str(), limit, cursor.c_str(),
                                  pagination, page, page_limit,
                                  sort_field.c_str(), sort_desc, &len);
@@ -547,7 +579,7 @@ napi_value ReadRingJson(napi_env env, napi_callback_info info) {
   }
   napi_value str;
   napi_create_string_utf8(env, reinterpret_cast<const char *>(p), len, &str);
-  roche_free(p);
+  kouten_free(p);
   return str;
 }
 
@@ -566,7 +598,7 @@ napi_value Retrieve(napi_env env, napi_callback_info info) {
   int budget = argc > 3 ? IntArg(env, args[3]) : 8;
   int top_rings = argc > 4 ? IntArg(env, args[4]) : 0;
   int focus = argc > 5 ? IntArg(env, args[5]) : 0;
-  roche_retrieve_result *rr = roche_retrieve(handle->db, vec.data, vec.len,
+  kouten_retrieve_result *rr = kouten_retrieve(handle->db, vec.data, vec.len,
                                              ring.c_str(), budget, top_rings, focus);
   if (rr == nullptr) {
     ThrowLast(env);
@@ -611,7 +643,7 @@ napi_value Retrieve(napi_env env, napi_callback_info info) {
   napi_create_double(env, rr->candidate_reduction, &reduction);
   napi_set_named_property(env, stats, "candidateReduction", reduction);
   napi_set_named_property(env, out, "stats", stats);
-  roche_retrieve_free(rr);
+  kouten_retrieve_free(rr);
   return out;
 }
 
@@ -634,14 +666,14 @@ napi_value Atlas(napi_env env, napi_callback_info info) {
   }
   int max_dims = argc > 2 ? IntArg(env, args[2]) : 8;
   size_t len = 0;
-  void *p = roche_atlas(handle->db, vec_data, vec_len, max_dims, &len);
+  void *p = kouten_atlas(handle->db, vec_data, vec_len, max_dims, &len);
   if (p == nullptr) {
     ThrowLast(env);
     return nullptr;
   }
   napi_value str;
   napi_create_string_utf8(env, reinterpret_cast<const char *>(p), len, &str);
-  roche_free(p);
+  kouten_free(p);
   return str;
 }
 
@@ -655,9 +687,9 @@ napi_value Locate(napi_env env, napi_callback_info info) {
   }
   DbHandle *handle = DbArg(env, args[0]);
   if (handle == nullptr) return nullptr;
-  roche_id id = IdArg(env, args[1]);
+  kouten_id id = IdArg(env, args[1]);
   double at = argc > 2 ? DoubleArg(env, args[2]) : -1.0;
-  int node = roche_locate(handle->db, id, at);
+  int node = kouten_locate(handle->db, id, at);
   napi_value out;
   napi_create_int32(env, node, &out);
   return out;
@@ -674,7 +706,7 @@ napi_value Now(napi_env env, napi_callback_info info) {
   DbHandle *handle = DbArg(env, args[0]);
   if (handle == nullptr) return nullptr;
   napi_value out;
-  napi_create_double(env, roche_now(handle->db), &out);
+  napi_create_double(env, kouten_now(handle->db), &out);
   return out;
 }
 
@@ -688,7 +720,7 @@ napi_value Advance(napi_env env, napi_callback_info info) {
   }
   DbHandle *handle = DbArg(env, args[0]);
   if (handle == nullptr) return nullptr;
-  roche_advance(handle->db, DoubleArg(env, args[1]));
+  kouten_advance(handle->db, DoubleArg(env, args[1]));
   return Undefined(env);
 }
 
@@ -702,10 +734,10 @@ napi_value NextVisit(napi_env env, napi_callback_info info) {
   }
   DbHandle *handle = DbArg(env, args[0]);
   if (handle == nullptr) return nullptr;
-  roche_id id = IdArg(env, args[1]);
+  kouten_id id = IdArg(env, args[1]);
   int node = IntArg(env, args[2]);
   napi_value out;
-  napi_create_double(env, roche_next_visit(handle->db, id, node), &out);
+  napi_create_double(env, kouten_next_visit(handle->db, id, node), &out);
   return out;
 }
 
@@ -719,10 +751,10 @@ napi_value NextJoin(napi_env env, napi_callback_info info) {
   }
   DbHandle *handle = DbArg(env, args[0]);
   if (handle == nullptr) return nullptr;
-  roche_id a = IdArg(env, args[1]);
-  roche_id b = IdArg(env, args[2]);
+  kouten_id a = IdArg(env, args[1]);
+  kouten_id b = IdArg(env, args[2]);
   napi_value out;
-  napi_create_double(env, roche_next_join(handle->db, a, b), &out);
+  napi_create_double(env, kouten_next_join(handle->db, a, b), &out);
   return out;
 }
 
@@ -738,7 +770,7 @@ napi_value ConfigureRing(napi_env env, napi_callback_info info) {
   if (handle == nullptr) return nullptr;
   std::string ring = StringArg(env, args[1]);
   double period = DoubleArg(env, args[2]);
-  if (roche_ring_configure(handle->db, ring.c_str(), period) != ROCHE_OK) {
+  if (kouten_ring_configure(handle->db, ring.c_str(), period) != KOUTEN_OK) {
     ThrowLast(env);
     return nullptr;
   }
@@ -756,7 +788,7 @@ napi_value SetGalaxyDescription(napi_env env, napi_callback_info info) {
   DbHandle *handle = DbArg(env, args[0]);
   if (handle == nullptr) return nullptr;
   std::string description = StringArg(env, args[1]);
-  if (roche_set_galaxy_description(handle->db, description.c_str()) != ROCHE_OK) {
+  if (kouten_set_galaxy_description(handle->db, description.c_str()) != KOUTEN_OK) {
     ThrowLast(env);
     return nullptr;
   }
@@ -775,7 +807,7 @@ napi_value SetRingDescription(napi_env env, napi_callback_info info) {
   if (handle == nullptr) return nullptr;
   std::string ring = StringArg(env, args[1]);
   std::string description = StringArg(env, args[2]);
-  if (roche_set_ring_description(handle->db, ring.c_str(), description.c_str()) != ROCHE_OK) {
+  if (kouten_set_ring_description(handle->db, ring.c_str(), description.c_str()) != KOUTEN_OK) {
     ThrowLast(env);
     return nullptr;
   }
@@ -783,12 +815,14 @@ napi_value SetRingDescription(napi_env env, napi_callback_info info) {
 }
 
 napi_value Init(napi_env env, napi_value exports) {
-  roche_init();
+  kouten_init();
   napi_property_descriptor props[] = {
     {"open", nullptr, Open, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"openDir", nullptr, OpenDir, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"connect", nullptr, Connect, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"connectAuth", nullptr, ConnectAuth, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"connectAuthTls", nullptr, ConnectAuthTls, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"abiVersion", nullptr, AbiVersion, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"close", nullptr, Close, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"put", nullptr, Put, nullptr, nullptr, nullptr, napi_default, nullptr},
     {"putCodec", nullptr, PutCodec, nullptr, nullptr, nullptr, napi_default, nullptr},
