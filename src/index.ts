@@ -2,14 +2,14 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export interface RocheId {
+export interface KoutenId {
   parent: bigint;
   epoch: number;
   seq: number;
   tWrite: number;
 }
 
-export type RocheDbErrorKind =
+export type KoutenDbErrorKind =
   | "abi"
   | "abi_version_mismatch"
   | "closed"
@@ -20,32 +20,32 @@ export type RocheDbErrorKind =
   | "type"
   | "unknown";
 
-export class RocheDbError extends Error {
-  readonly kind: RocheDbErrorKind;
+export class KoutenDbError extends Error {
+  readonly kind: KoutenDbErrorKind;
   readonly cause?: unknown;
 
-  constructor(kind: RocheDbErrorKind, message: string, cause?: unknown) {
+  constructor(kind: KoutenDbErrorKind, message: string, cause?: unknown) {
     super(message);
-    this.name = "RocheDbError";
+    this.name = "KoutenDbError";
     this.kind = kind;
     this.cause = cause;
   }
 }
 
-export function isRocheDbError(value: unknown): value is RocheDbError {
-  return value instanceof RocheDbError;
+export function isKoutenDbError(value: unknown): value is KoutenDbError {
+  return value instanceof KoutenDbError;
 }
 
-export function formatRocheId(id: RocheId): string {
+export function formatKoutenId(id: KoutenId): string {
   return `${id.parent}:${id.epoch}:${id.seq}:${id.tWrite}`;
 }
 
-export function parseRocheId(value: string): RocheId {
+export function parseKoutenId(value: string): KoutenId {
   const parts = value.split(":");
   if (parts.length !== 4) {
-    throw new RocheDbError(
+    throw new KoutenDbError(
       "invalid_id",
-      `invalid RocheDB id '${value}': expected parent:epoch:seq:tWrite`,
+      `invalid KoutenDB id '${value}': expected parent:epoch:seq:tWrite`,
     );
   }
 
@@ -57,8 +57,8 @@ export function parseRocheId(value: string): RocheId {
       tWrite: parseNumberPart(parts[3], "tWrite"),
     };
   } catch (error) {
-    if (error instanceof RocheDbError) throw error;
-    throw new RocheDbError("invalid_id", `invalid RocheDB id '${value}'`, error);
+    if (error instanceof KoutenDbError) throw error;
+    throw new KoutenDbError("invalid_id", `invalid KoutenDB id '${value}'`, error);
   }
 }
 
@@ -68,6 +68,23 @@ export interface ConnectOptions {
   authToken?: string;
   secretKey?: string;
   galaxy?: string;
+  /** Enable TLS. Requires a KoutenDB core built with `-d:ssl`. */
+  tls?: boolean;
+  /**
+   * Verify the server against a CA or self-signed certificate PEM, and enable
+   * TLS. Certificate verification stays on, so this is the right way to reach a
+   * server with a private CA or self-signed certificate.
+   */
+  tlsCaFile?: string;
+  /** Override the hostname used for verification and SNI, and enable TLS. */
+  tlsServerName?: string;
+  /**
+   * Disable certificate verification entirely, and enable TLS. The connection
+   * is then encrypted but unauthenticated and trivially impersonable, so this
+   * is for local smoke tests only — never a production server. Prefer
+   * `tlsCaFile` for self-signed certificates.
+   */
+  dangerouslyAcceptInvalidCerts?: boolean;
 }
 
 export interface RetrieveOptions {
@@ -125,7 +142,7 @@ export interface RetrieveStats {
 }
 
 export interface RetrieveHit {
-  id: RocheId;
+  id: KoutenId;
   score: number;
   payload: Uint8Array;
 }
@@ -152,19 +169,32 @@ interface NativeBinding {
     secretKey: string,
     galaxy: string,
   ): unknown;
+  connectAuthTls(
+    peers: string,
+    username: string,
+    password: string,
+    authToken: string,
+    secretKey: string,
+    galaxy: string,
+    tls: number,
+    tlsCaFile: string,
+    tlsServerName: string,
+    tlsInsecureSkipVerify: number,
+  ): unknown;
+  abiVersion(): number;
   close(db: unknown): void;
-  put(db: unknown, ring: string, data: Uint8Array | string, vec?: Float32Array): RocheId;
+  put(db: unknown, ring: string, data: Uint8Array | string, vec?: Float32Array): KoutenId;
   putCodec(
     db: unknown,
     ring: string,
     data: Uint8Array | ArrayBuffer | string,
     codec: number,
     vec?: Float32Array,
-  ): RocheId;
-  get(db: unknown, id: RocheId): Uint8Array | null;
-  getEncoded(db: unknown, id: RocheId): EncodedPayload | null;
-  batchGet(db: unknown, ids: RocheId[]): Array<Uint8Array | null>;
-  query(db: unknown, id: RocheId, selection: string): Uint8Array;
+  ): KoutenId;
+  get(db: unknown, id: KoutenId): Uint8Array | null;
+  getEncoded(db: unknown, id: KoutenId): EncodedPayload | null;
+  batchGet(db: unknown, ids: KoutenId[]): Array<Uint8Array | null>;
+  query(db: unknown, id: KoutenId, selection: string): Uint8Array;
   readRingJson(
     db: unknown,
     ring: string,
@@ -187,11 +217,11 @@ interface NativeBinding {
     focus: number,
   ): RetrieveResult;
   atlas(db: unknown, vec: Float32Array | undefined, maxCentroidDims: number): string;
-  locate(db: unknown, id: RocheId, at: number): number;
+  locate(db: unknown, id: KoutenId, at: number): number;
   now(db: unknown): number;
   advance(db: unknown, dt: number): void;
-  nextVisit(db: unknown, id: RocheId, node: number): number;
-  nextJoin(db: unknown, a: RocheId, b: RocheId): number;
+  nextVisit(db: unknown, id: KoutenId, node: number): number;
+  nextJoin(db: unknown, a: KoutenId, b: KoutenId): number;
   configureRing(db: unknown, ring: string, period: number): void;
   setGalaxyDescription(db: unknown, description: string): void;
   setRingDescription(db: unknown, ring: string, description: string): void;
@@ -201,8 +231,8 @@ function loadNative(): NativeBinding {
   const require = createRequire(import.meta.url);
   const here = dirname(fileURLToPath(import.meta.url));
   const nativePath =
-    process.env.ROCHEDB_NATIVE_PATH ??
-    join(here, "..", "build", "Release", "rochedb_native.node");
+    process.env.KOUTENDB_NATIVE_PATH ??
+    join(here, "..", "build", "Release", "koutendb_native.node");
   return require(nativePath) as NativeBinding;
 }
 
@@ -210,11 +240,11 @@ const native = loadNative();
 
 function parseUint32Part(value: string, name: string): number {
   if (!/^\d+$/.test(value)) {
-    throw new RocheDbError("invalid_id", `invalid RocheDB id field '${name}': ${value}`);
+    throw new KoutenDbError("invalid_id", `invalid KoutenDB id field '${name}': ${value}`);
   }
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 0xffffffff) {
-    throw new RocheDbError("invalid_id", `invalid RocheDB id field '${name}' is out of range`);
+    throw new KoutenDbError("invalid_id", `invalid KoutenDB id field '${name}' is out of range`);
   }
   return parsed;
 }
@@ -222,12 +252,12 @@ function parseUint32Part(value: string, name: string): number {
 function parseNumberPart(value: string, name: string): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
-    throw new RocheDbError("invalid_id", `invalid RocheDB id field '${name}': ${value}`);
+    throw new KoutenDbError("invalid_id", `invalid KoutenDB id field '${name}': ${value}`);
   }
   return parsed;
 }
 
-function classifyNativeError(error: unknown): RocheDbErrorKind {
+function classifyNativeError(error: unknown): KoutenDbErrorKind {
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
   if (lower.includes("abi version")) return "abi_version_mismatch";
@@ -240,14 +270,36 @@ function classifyNativeError(error: unknown): RocheDbErrorKind {
   return "unknown";
 }
 
+// On Node the built-in OpenSSL and the system libssl that the core dlopens can
+// collide, leaving the error queue empty on the copy the core reads. TLS
+// failures then surface as this sentinel with no detail. The failure itself is
+// unaffected (connections still fail closed); only the message is lost.
+const OPENSSL_EMPTY_SENTINEL = "No error reported.";
+
+function enrichNativeMessage(message: string): string {
+  if (message.trim() !== OPENSSL_EMPTY_SENTINEL) return message;
+  return (
+    "TLS operation failed, but OpenSSL reported no detail. On Node this usually " +
+    "means certificate verification failed — check tlsCaFile, tlsServerName, or " +
+    "the server certificate. Original: " +
+    OPENSSL_EMPTY_SENTINEL
+  );
+}
+
 function wrapNative<T>(fn: () => T): T {
   try {
     return fn();
   } catch (error) {
-    if (error instanceof RocheDbError) throw error;
-    const message = error instanceof Error ? error.message : String(error);
-    throw new RocheDbError(classifyNativeError(error), message, error);
+    if (error instanceof KoutenDbError) throw error;
+    const raw = error instanceof Error ? error.message : String(error);
+    const message = enrichNativeMessage(raw);
+    throw new KoutenDbError(classifyNativeError(error), message, error);
   }
+}
+
+/** KoutenDB C ABI version the loaded native library was built against. */
+export function abiVersion(): number {
+  return wrapNative(() => native.abiVersion());
 }
 
 function bytes(data: string | Uint8Array | ArrayBuffer): string | Uint8Array {
@@ -271,11 +323,11 @@ function codecCode(codec: PayloadCodec): number {
     case "bif":
       return 3;
     default:
-      throw new RocheDbError("type", `unsupported payload codec: ${codec}`);
+      throw new KoutenDbError("type", `unsupported payload codec: ${codec}`);
   }
 }
 
-export class RocheDb {
+export class KoutenDb {
   #handle: unknown;
   #closed = false;
 
@@ -283,15 +335,36 @@ export class RocheDb {
     this.#handle = handle;
   }
 
-  static open(nodes = 8): RocheDb {
-    return wrapNative(() => new RocheDb(native.open(nodes)));
+  static open(nodes = 8): KoutenDb {
+    return wrapNative(() => new KoutenDb(native.open(nodes)));
   }
 
-  static openDir(nodes: number, dir: string): RocheDb {
-    return wrapNative(() => new RocheDb(native.openDir(nodes, dir)));
+  static openDir(nodes: number, dir: string): KoutenDb {
+    return wrapNative(() => new KoutenDb(native.openDir(nodes, dir)));
   }
 
-  static connect(peers: string, options: ConnectOptions = {}): RocheDb {
+  static connect(peers: string, options: ConnectOptions = {}): KoutenDb {
+    const useTls =
+      options.tls === true ||
+      options.tlsCaFile !== undefined ||
+      options.tlsServerName !== undefined ||
+      options.dangerouslyAcceptInvalidCerts === true;
+    if (useTls) {
+      return wrapNative(
+        () => new KoutenDb(native.connectAuthTls(
+          peers,
+          options.username ?? "",
+          options.password ?? "",
+          options.authToken ?? "",
+          options.secretKey ?? "",
+          options.galaxy ?? "",
+          1,
+          options.tlsCaFile ?? "",
+          options.tlsServerName ?? "",
+          options.dangerouslyAcceptInvalidCerts === true ? 1 : 0,
+        )),
+      );
+    }
     const hasAuth =
       options.username !== undefined ||
       options.password !== undefined ||
@@ -299,10 +372,10 @@ export class RocheDb {
       options.secretKey !== undefined ||
       options.galaxy !== undefined;
     if (!hasAuth) {
-      return wrapNative(() => new RocheDb(native.connect(peers)));
+      return wrapNative(() => new KoutenDb(native.connect(peers)));
     }
     return wrapNative(
-      () => new RocheDb(native.connectAuth(
+      () => new KoutenDb(native.connectAuth(
         peers,
         options.username ?? "",
         options.password ?? "",
@@ -320,27 +393,27 @@ export class RocheDb {
     }
   }
 
-  put(ring: string, data: string | Uint8Array): RocheId {
+  put(ring: string, data: string | Uint8Array): KoutenId {
     return wrapNative(() => native.put(this.#handle, ring, bytes(data)));
   }
 
-  putCodec(ring: string, data: string | Uint8Array | ArrayBuffer, codec: PayloadCodec): RocheId {
+  putCodec(ring: string, data: string | Uint8Array | ArrayBuffer, codec: PayloadCodec): KoutenId {
     return wrapNative(() => native.putCodec(this.#handle, ring, bytes(data), codecCode(codec)));
   }
 
-  putJson(ring: string, value: unknown): RocheId {
+  putJson(ring: string, value: unknown): KoutenId {
     return this.putCodec(ring, JSON.stringify(value), "json");
   }
 
-  putNif(ring: string, text: string): RocheId {
+  putNif(ring: string, text: string): KoutenId {
     return this.putCodec(ring, text, "nif");
   }
 
-  putBif(ring: string, data: Uint8Array): RocheId {
+  putBif(ring: string, data: Uint8Array): KoutenId {
     return this.putCodec(ring, data, "bif");
   }
 
-  putVec(ring: string, data: string | Uint8Array, vec: number[] | Float32Array): RocheId {
+  putVec(ring: string, data: string | Uint8Array, vec: number[] | Float32Array): KoutenId {
     return wrapNative(() => native.put(this.#handle, ring, bytes(data), vector(vec)));
   }
 
@@ -349,7 +422,7 @@ export class RocheDb {
     data: string | Uint8Array | ArrayBuffer,
     vec: number[] | Float32Array,
     codec: PayloadCodec,
-  ): RocheId {
+  ): KoutenId {
     return wrapNative(() => native.putCodec(
       this.#handle,
       ring,
@@ -359,51 +432,51 @@ export class RocheDb {
     ));
   }
 
-  putJsonVec(ring: string, value: unknown, vec: number[] | Float32Array): RocheId {
+  putJsonVec(ring: string, value: unknown, vec: number[] | Float32Array): KoutenId {
     return this.putVecCodec(ring, JSON.stringify(value), vec, "json");
   }
 
-  putNifVec(ring: string, text: string, vec: number[] | Float32Array): RocheId {
+  putNifVec(ring: string, text: string, vec: number[] | Float32Array): KoutenId {
     return this.putVecCodec(ring, text, vec, "nif");
   }
 
-  putBifVec(ring: string, data: Uint8Array, vec: number[] | Float32Array): RocheId {
+  putBifVec(ring: string, data: Uint8Array, vec: number[] | Float32Array): KoutenId {
     return this.putVecCodec(ring, data, vec, "bif");
   }
 
-  get(id: RocheId): Uint8Array | null {
+  get(id: KoutenId): Uint8Array | null {
     return wrapNative(() => native.get(this.#handle, id));
   }
 
-  getEncoded(id: RocheId): EncodedPayload | null {
+  getEncoded(id: KoutenId): EncodedPayload | null {
     return wrapNative(() => native.getEncoded(this.#handle, id));
   }
 
-  getString(id: RocheId): string | null {
+  getString(id: KoutenId): string | null {
     const value = this.get(id);
     return value === null ? null : new TextDecoder().decode(value);
   }
 
-  batchGet(ids: RocheId[]): Array<Uint8Array | null> {
+  batchGet(ids: KoutenId[]): Array<Uint8Array | null> {
     return wrapNative(() => native.batchGet(this.#handle, ids));
   }
 
-  batchGetStrings(ids: RocheId[]): Array<string | null> {
+  batchGetStrings(ids: KoutenId[]): Array<string | null> {
     const decoder = new TextDecoder();
     return this.batchGet(ids).map((value) => (value === null ? null : decoder.decode(value)));
   }
 
-  query(id: RocheId, selection: string): Uint8Array {
+  query(id: KoutenId, selection: string): Uint8Array {
     return wrapNative(() => native.query(this.#handle, id, selection));
   }
 
-  queryString(id: RocheId, selection: string): string {
+  queryString(id: KoutenId, selection: string): string {
     return new TextDecoder().decode(this.query(id, selection));
   }
 
   readRing(ring: string, options: ReadRingOptions = {}): ReadRingPage {
     if (options.sort !== undefined && options.rsort !== undefined) {
-      throw new RocheDbError("type", "readRing options cannot set both sort and rsort");
+      throw new KoutenDbError("type", "readRing options cannot set both sort and rsort");
     }
     const filterJson = options.filterJson ?? JSON.stringify(options.filter ?? {});
     const sortField = options.sort ?? options.rsort ?? "";
@@ -424,7 +497,7 @@ export class RocheDb {
     try {
       return JSON.parse(raw) as ReadRingPage;
     } catch (error) {
-      throw new RocheDbError("utf8", "RocheDB readRing returned invalid JSON", error);
+      throw new KoutenDbError("utf8", "KoutenDB readRing returned invalid JSON", error);
     }
   }
 
@@ -448,11 +521,11 @@ export class RocheDb {
     try {
       return JSON.parse(raw);
     } catch (error) {
-      throw new RocheDbError("utf8", "RocheDB atlas returned invalid JSON", error);
+      throw new KoutenDbError("utf8", "KoutenDB atlas returned invalid JSON", error);
     }
   }
 
-  locate(id: RocheId, at = -1): number {
+  locate(id: KoutenId, at = -1): number {
     return wrapNative(() => native.locate(this.#handle, id, at));
   }
 
@@ -464,11 +537,11 @@ export class RocheDb {
     wrapNative(() => native.advance(this.#handle, dt));
   }
 
-  nextVisit(id: RocheId, node: number): number {
+  nextVisit(id: KoutenId, node: number): number {
     return wrapNative(() => native.nextVisit(this.#handle, id, node));
   }
 
-  nextJoin(a: RocheId, b: RocheId): number {
+  nextJoin(a: KoutenId, b: KoutenId): number {
     return wrapNative(() => native.nextJoin(this.#handle, a, b));
   }
 

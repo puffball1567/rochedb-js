@@ -1,15 +1,15 @@
 {
-  "name": "rochedb",
-  "version": "0.1.3",
-  "description": "JavaScript / TypeScript driver for RocheDB",
+  "name": "koutendb",
+  "version": "0.1.4",
+  "description": "JavaScript / TypeScript driver for KoutenDB",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/puffball1567/rochedb",
+  "homepage": "https://github.com/puffball1567/koutendb",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/puffball1567/rochedb-js.git"
+    "url": "git+https://github.com/puffball1567/koutendb-js.git"
   },
   "bugs": {
-    "url": "https://github.com/puffball1567/rochedb-js/issues"
+    "url": "https://github.com/puffball1567/koutendb-js/issues"
   },
   "type": "module",
   "main": "./dist/index.js",
@@ -42,7 +42,7 @@
     "nosql",
     "vector",
     "rag",
-    "rochedb",
+    "koutendb",
     "typescript"
   ],
   "devDependencies": {

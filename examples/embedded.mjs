@@ -1,10 +1,10 @@
-import { RocheDb } from "../dist/index.js";
+import { KoutenDb } from "../dist/index.js";
 
-const db = RocheDb.open(4);
+const db = KoutenDb.open(4);
 
 try {
-  db.setGalaxyDescription("Local demo galaxy for RocheDB JavaScript / TypeScript.");
-  db.setRingDescription("docs/nim", "Nim and RocheDB related documents.");
+  db.setGalaxyDescription("Local demo galaxy for KoutenDB JavaScript / TypeScript.");
+  db.setRingDescription("docs/nim", "Nim and KoutenDB related documents.");
   db.configureRing("docs/nim", 60);
 
   const profileId = db.putJson("users/42/profile", {
@@ -15,9 +15,9 @@ try {
   const docId = db.putJsonVec(
     "docs/nim",
     {
-      title: "RocheDB rings",
+      title: "KoutenDB rings",
       lang: "nim",
-      body: "RocheDB uses explicit rings to reduce unnecessary reads before retrieval.",
+      body: "KoutenDB uses explicit rings to reduce unnecessary reads before retrieval.",
     },
     [1, 0, 0],
   );
